@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "title": "CAEOS — نظام التشغيل الهندسي الدستوري",
+    "description": "نظام حوكمة هندسية يحول النية البشرية إلى بنى تقنية إنتاجية"
+  },
+  "nav": {
+    "dashboard": "لوحة التحكم",
+    "projects": "المشاريع",
+    "wizard": "المعالج التفاعلي",
+    "decisions": "القرارات",
+    "agents": "الـAgents",
+    "constitution": "الدستور",
+    "language": "اللغة"
+  },
+  "hero": {
+    "title": "CAEOS v2.0",
+    "subtitle": "نظام التشغيل الهندسي للذكاء الاصطناعي الدستوري",
+    "description": "ليس مساعد برمجة. بل نظام حوكمة هندسية يمنع الانهيار المعماري ويحافظ على السيادة البشرية.",
+    "cta_primary": "ابدأ مشروعاً جديداً",
+    "cta_secondary": "اقرأ الدستور"
+  },
+  "wizard": {
+    "title": "المعالج التفاعلي",
+    "subtitle": "CAEOS يوجهك بأسئلة متعددة الخيارات",
+    "progress": "التقدم",
+    "question_counter": "سؤال {current} من {total}",
+    "recommendation": "التوصية الذكية",
+    "explain": "لماذا هذا مهم؟",
+    "back": "عودة للخلف",
+    "custom": "خيار مخصص",
+    "confirm": "تأكيد",
+    "summary_title": "ملخص القرارات",
+    "summary_description": "راجع اختياراتك قبل التصديق",
+    "ratify": "أُصّدق على هذه القرارات",
+    "modify": "تعديل قرار"
+  },
+  "decision": {
+    "title": "سجل القرارات",
+    "phase": "المرحلة",
+    "layer": "الطبقة",
+    "choice": "الاختيار",
+    "recommendation": "التوصية",
+    "timestamp": "التاريخ",
+    "status": "الحالة",
+    "ratified": "مُصدّق",
+    "pending": "مُعلق"
+  },
+  "status": {
+    "draft": "مسودة",
+    "review": "مراجعة",
+    "validated": "مُتحقق",
+    "approved": "مُعتمد",
+    "executing": "قيد التنفيذ",
+    "verified": "مُتحقق",
+    "sealed": "مُختوم",
+    "archived": "مؤرشف"
+  },
+  "errors": {
+    "generic": "حدث خطأ ما",
+    "constitution_violation": "تجاوز دستوري — ممنوع الاستمرار",
+    "unauthorized": "غير مُصرّح",
+    "not_found": "غير موجود"
+  }
+}
