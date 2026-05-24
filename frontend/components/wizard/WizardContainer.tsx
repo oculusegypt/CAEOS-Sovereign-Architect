@@ -221,4 +221,220 @@ const MOCK_QUESTIONS = [
     phase: "P2",
     layer: "L2",
     title: "Language & Localization",
-    titleAr: 
+    titleAr: "اللغة والتدويل",
+    context: "The primary language determines UI direction (RTL/LTR) and documentation.",
+    contextAr: "اللغة الرئيسية تحدد اتجاه UI (RTL/LTR) والتوثيق.",
+    impact: "Arabic = RTL UI. English = LTR. Bilingual = both.",
+    impactAr: "عربي = RTL. English = LTR. Bilingual = كلاهما.",
+    options: [
+      {
+        label: "Arabic only",
+        labelAr: "العربية فقط",
+        value: "A",
+        consequence: "RTL UI, Arabic docs, harder for international devs",
+        consequenceAr: "RTL UI، وثائق عربية، أصعب للمطورين الدوليين",
+        isRecommended: false,
+      },
+      {
+        label: "⭐ Bilingual (Arabic + English)",
+        labelAr: "⭐ ثنائي اللغة (عربي + English)",
+        value: "B",
+        consequence: "Arabic UX + English GitHub/docs, wider reach",
+        consequenceAr: "UX عربي + GitHub/docs English، انتشار أوسع",
+        isRecommended: true,
+      },
+      {
+        label: "English only",
+        labelAr: "English فقط",
+        value: "C",
+        consequence: "Easier for GitHub/Documentation, loses Arabic identity",
+        consequenceAr: "أسهل GitHub/Documentation، يفقد هوية عربية",
+        isRecommended: false,
+      },
+      {
+        label: "Arabic UI + English Code + English Docs",
+        labelAr: "UI عربي + Code English + Docs English",
+        value: "D",
+        consequence: "Clear separation: Arabic for users, English for devs",
+        consequenceAr: "فصل واضح: عربي للمستخدمين، English للمطورين",
+        isRecommended: false,
+      },
+    ],
+    questionNumber: 5,
+    totalQuestions: 5,
+    progressPercentage: 100,
+  },
+];
+
+export default function WizardContainer() {
+  const t = useTranslations("wizard");
+  const [state, setState] = useState<WizardState>({
+    currentQuestionIndex: 0,
+    answers: [],
+    showSummary: false,
+    isSubmitting: false,
+    showExplain: false,
+  });
+
+  const currentQuestion = MOCK_QUESTIONS[state.currentQuestionIndex];
+  const currentAnswer = state.answers.find(
+    (a) => a.questionId === currentQuestion?.id
+  );
+
+  const handleSelect = useCallback((value: string) => {
+    setState((prev) => {
+      const newAnswers = prev.answers.filter(
+        (a) => a.questionId !== currentQuestion.id
+      );
+      newAnswers.push({
+        questionId: currentQuestion.id,
+        choice: value,
+        confirmed: true,
+      });
+
+      // Auto-advance after 500ms
+      const nextIndex = prev.currentQuestionIndex + 1;
+      const showSummary = nextIndex >= MOCK_QUESTIONS.length;
+
+      return {
+        ...prev,
+        answers: newAnswers,
+        currentQuestionIndex: showSummary ? prev.currentQuestionIndex : nextIndex,
+        showSummary,
+      };
+    });
+  }, [currentQuestion]);
+
+  const handleCustom = useCallback((text: string) => {
+    setState((prev) => {
+      const newAnswers = prev.answers.filter(
+        (a) => a.questionId !== currentQuestion.id
+      );
+      newAnswers.push({
+        questionId: currentQuestion.id,
+        choice: "CUSTOM",
+        customText: text,
+        confirmed: true,
+      });
+
+      const nextIndex = prev.currentQuestionIndex + 1;
+      const showSummary = nextIndex >= MOCK_QUESTIONS.length;
+
+      return {
+        ...prev,
+        answers: newAnswers,
+        currentQuestionIndex: showSummary ? prev.currentQuestionIndex : nextIndex,
+        showSummary,
+      };
+    });
+  }, [currentQuestion]);
+
+  const handleBack = useCallback(() => {
+    setState((prev) => {
+      if (prev.showSummary) {
+        return { ...prev, showSummary: false };
+      }
+      if (prev.currentQuestionIndex > 0) {
+        return {
+          ...prev,
+          currentQuestionIndex: prev.currentQuestionIndex - 1,
+        };
+      }
+      return prev;
+    });
+  }, []);
+
+  const handleExplain = useCallback(() => {
+    setState((prev) => ({ ...prev, showExplain: !prev.showExplain }));
+  }, []);
+
+  const handleModify = useCallback((questionIndex: number) => {
+    setState((prev) => ({
+      ...prev,
+      currentQuestionIndex: questionIndex,
+      showSummary: false,
+    }));
+  }, []);
+
+  const handleRatify = useCallback(async () => {
+    setState((prev) => ({ ...prev, isSubmitting: true }));
+
+    // Simulate API call
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    // In production: POST /api/v1/wizard/ratify/{project_id}
+    console.log("Ratified decisions:", state.answers);
+
+    setState((prev) => ({ ...prev, isSubmitting: false }));
+    // Redirect to dashboard or next phase
+  }, [state.answers]);
+
+  // Build summary data
+  const summaryAnswers = state.answers.map((answer) => {
+    const question = MOCK_QUESTIONS.find((q) => q.id === answer.questionId);
+    const option = question?.options.find((o) => o.value === answer.choice);
+    return {
+      questionId: answer.questionId,
+      questionTitle: question?.title || "Unknown",
+      questionTitleAr: question?.titleAr,
+      choice: answer.choice,
+      choiceLabel: option?.label || answer.customText || "Custom",
+      choiceLabelAr: option?.labelAr,
+      isRecommended: option?.isRecommended || false,
+      consequence: option?.consequence || "Custom choice",
+    };
+  });
+
+  if (!currentQuestion && !state.showSummary) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <CheckCircle className="h-16 w-16 text-caeos-success mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">
+            All questions answered!
+          </h2>
+          <button
+            onClick={() => setState((prev) => ({ ...prev, showSummary: true }))}
+            className="px-6 py-3 bg-caeos-primary text-white rounded-lg font-semibold hover:bg-blue-600"
+          >
+            View Summary
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 py-12 px-4">
+      <div className="max-w-4xl mx-auto">
+        <AnimatePresence mode="wait">
+          {state.showSummary ? (
+            <SummaryScreen
+              key="summary"
+              answers={summaryAnswers}
+              onRatify={handleRatify}
+              onModify={handleModify}
+              onBack={handleBack}
+              isSubmitting={state.isSubmitting}
+            />
+          ) : (
+            <QuestionCard
+              key={currentQuestion.id}
+              question={currentQuestion}
+              selectedChoice={currentAnswer?.choice || null}
+              onSelect={handleSelect}
+              onBack={handleBack}
+              onExplain={handleExplain}
+              onCustom={handleCustom}
+              showExplain={state.showExplain}
+            />
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
