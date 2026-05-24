@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "title": "CAEOS — Constitutional AI Engineering OS",
+    "description": "A governance system that transforms human intent into production-grade software architectures"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "wizard": "Interactive Wizard",
+    "decisions": "Decisions",
+    "agents": "Agents",
+    "constitution": "Constitution",
+    "language": "Language"
+  },
+  "hero": {
+    "title": "CAEOS v2.0",
+    "subtitle": "Constitutional AI Engineering Operating System",
+    "description": "Not a coding assistant. A governance kernel that prevents architectural collapse and preserves human sovereignty.",
+    "cta_primary": "Start New Project",
+    "cta_secondary": "Read Constitution"
+  },
+  "wizard": {
+    "title": "Interactive Wizard",
+    "subtitle": "CAEOS guides you through multiple-choice questions",
+    "progress": "Progress",
+    "question_counter": "Question {current} of {total}",
+    "recommendation": "Smart Recommendation",
+    "explain": "Why does this matter?",
+    "back": "Go Back",
+    "custom": "Custom Choice",
+    "confirm": "Confirm",
+    "summary_title": "Decision Summary",
+    "summary_description": "Review your choices before ratification",
+    "ratify": "I Ratify These Decisions",
+    "modify": "Modify Decision"
+  },
+  "decision": {
+    "title": "Decision Log",
+    "phase": "Phase",
+    "layer": "Layer",
+    "choice": "Choice",
+    "recommendation": "Recommendation",
+    "timestamp": "Timestamp",
+    "status": "Status",
+    "ratified": "Ratified",
+    "pending": "Pending"
+  },
+  "status": {
+    "draft": "Draft",
+    "review": "Review",
+    "validated": "Validated",
+    "approved": "Approved",
+    "executing": "Executing",
+    "verified": "Verified",
+    "sealed": "Sealed",
+    "archived": "Archived"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "constitution_violation": "Constitutional Violation — Cannot Proceed",
+    "unauthorized": "Unauthorized",
+    "not_found": "Not Found"
+  }
+}
