@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/caeos-mobile/"
+title = "CAEOS Mobile"
+version = "1.0.0"
+id = "artifacts/caeos-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/caeos-mobile/" ]
+localPort = 24213
+
+[services.development]
+run = "pnpm --filter @workspace/caeos-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/caeos-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/caeos-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "24213"
+BASE_PATH = "/caeos-mobile/"
