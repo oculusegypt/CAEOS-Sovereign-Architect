@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "CAEOS — Constitutional AI Engineering OS"
+version = "1.0.0"
+id = "artifacts/caeos"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21048
+
+[services.development]
+run = "pnpm --filter @workspace/caeos run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/caeos", "run", "build" ]
+publicDir = "artifacts/caeos/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21048"
+BASE_PATH = "/"
