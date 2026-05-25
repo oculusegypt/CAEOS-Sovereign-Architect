@@ -1,0 +1,14 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "Q3-NvUbsPQslv5gyJupqF"
+uri = "file://artifacts/caeos-promo/public/images/layers.png"
+type = "image"
+title = "3D abstract layers"
+
+[[generated]]
+id = "VZGtE5RAgjSFJj3mJtZbA"
+uri = "file://artifacts/caeos-promo/public/images/circuit.png"
+type = "image"
+title = "Futuristic circuit board"
