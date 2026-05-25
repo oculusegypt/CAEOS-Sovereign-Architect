@@ -1,160 +1,288 @@
-import { useState } from "react";
-import { ChevronRight, ChevronLeft, CheckCircle, Lightbulb } from "lucide-react";
-import { useTranslations } from "@/lib/useTranslations";
+import { useState, useRef, useEffect } from "react";
+import { ChevronRight, ChevronLeft, Send, Loader2, RotateCcw, Brain, Shield } from "lucide-react";
 import { useLocale } from "@/context/LocaleContext";
 import { Link } from "wouter";
 
-interface WizardStep {
-  phase: string;
-  phaseAr: string;
-  question: string;
-  questionAr: string;
-  options: { label: string; labelAr: string; value: string }[];
-  recommendation: string;
-  recommendationAr: string;
-  explanation: string;
-  explanationAr: string;
+type Phase = "describe" | "chat" | "done";
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
 }
 
-const wizardSteps: WizardStep[] = [
-  {
-    phase: "P2 — Deep Interrogation",
-    phaseAr: "P2 — الاستجواب العميق",
-    question: "What is the primary delivery mode for this project?",
-    questionAr: "ما هو وضع التسليم الأساسي لهذا المشروع؟",
-    options: [
-      { label: "Hybrid (Agent + Dashboard)", labelAr: "هجين (Agent + Dashboard)", value: "hybrid" },
-      { label: "Fully Automated Agent", labelAr: "Agent مؤتمت بالكامل", value: "automated" },
-      { label: "Human-in-the-Loop", labelAr: "إنسان في الحلقة", value: "human" },
-    ],
-    recommendation: "Hybrid (Agent + Dashboard)",
-    recommendationAr: "هجين (Agent + Dashboard)",
-    explanation: "Hybrid mode balances AI power with human oversight — the most resilient architecture.",
-    explanationAr: "الوضع الهجين يوازن بين قوة الذكاء الاصطناعي والرقابة البشرية — الأكثر مرونة.",
-  },
-  {
-    phase: "P2 — Team Structure",
-    phaseAr: "P2 — هيكل الفريق",
-    question: "What is the team size for this project?",
-    questionAr: "ما حجم الفريق لهذا المشروع؟",
-    options: [
-      { label: "Solo Developer", labelAr: "مطور منفرد", value: "solo" },
-      { label: "Small Team (2-5)", labelAr: "فريق صغير (2-5)", value: "small" },
-      { label: "Large Team (6+)", labelAr: "فريق كبير (6+)", value: "large" },
-    ],
-    recommendation: "Solo Developer",
-    recommendationAr: "مطور منفرد",
-    explanation: "Solo execution maximizes speed and minimizes coordination overhead for initial builds.",
-    explanationAr: "التنفيذ المنفرد يزيد السرعة ويقلل تكاليف التنسيق في الإصدارات الأولى.",
-  },
-  {
-    phase: "P3 — Technical Blueprint",
-    phaseAr: "P3 — المخطط التقني",
-    question: "Which technology stack best fits your requirements?",
-    questionAr: "أي مكدس تقني يناسب متطلباتك؟",
-    options: [
-      { label: "Next.js + Python + PostgreSQL", labelAr: "Next.js + Python + PostgreSQL", value: "nextpy" },
-      { label: "React + Node + PostgreSQL", labelAr: "React + Node + PostgreSQL", value: "reactnode" },
-      { label: "Vue + FastAPI + MongoDB", labelAr: "Vue + FastAPI + MongoDB", value: "vuefastapi" },
-    ],
-    recommendation: "Next.js + Python + PostgreSQL",
-    recommendationAr: "Next.js + Python + PostgreSQL",
-    explanation: "Python-native stack is optimal for AI workloads with structured relational data.",
-    explanationAr: "المكدس المبني على Python هو الأمثل لأعباء الذكاء الاصطناعي مع البيانات العلائقية.",
-  },
-  {
-    phase: "P5 — Language Strategy",
-    phaseAr: "P5 — استراتيجية اللغة",
-    question: "What language strategy will you adopt?",
-    questionAr: "ما استراتيجية اللغة التي ستتبنى؟",
-    options: [
-      { label: "Bilingual (Arabic + English)", labelAr: "ثنائي (عربي + إنجليزي)", value: "bilingual" },
-      { label: "English Only", labelAr: "إنجليزية فقط", value: "en_only" },
-      { label: "Arabic Only", labelAr: "عربية فقط", value: "ar_only" },
-    ],
-    recommendation: "Bilingual (Arabic + English)",
-    recommendationAr: "ثنائي (عربي + إنجليزي)",
-    explanation: "Bilingual strategy maximizes reach: Arabic UX for the local audience, English for global GitHub.",
-    explanationAr: "الاستراتيجية الثنائية تزيد الانتشار: تجربة عربية للجمهور المحلي وإنجليزية لـ GitHub.",
-  },
-];
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+async function createSession(description: string): Promise<number> {
+  const res = await fetch(`${BASE}/api/wizard/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectDescription: description }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data.id as number;
+}
+
+async function* streamMessage(
+  sessionId: number,
+  content: string
+): AsyncGenerator<string> {
+  const res = await fetch(`${BASE}/api/wizard/sessions/${sessionId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const json = line.slice(6);
+      try {
+        const evt = JSON.parse(json);
+        if (evt.done) return;
+        if (evt.content) yield evt.content as string;
+      } catch {
+        // skip malformed
+      }
+    }
+  }
+}
+
+async function loadSession(sessionId: number): Promise<Message[]> {
+  const res = await fetch(`${BASE}/api/wizard/sessions/${sessionId}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.messages ?? []) as Message[];
+}
+
+function MarkdownText({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <div className="space-y-2">
+      {lines.map((line, i) => {
+        if (line.startsWith("**") && line.endsWith("**")) {
+          return (
+            <p key={i} className="font-semibold text-white">
+              {line.slice(2, -2)}
+            </p>
+          );
+        }
+        if (line.startsWith("- **")) {
+          const rest = line.slice(4);
+          const end = rest.indexOf("**");
+          const bold = rest.slice(0, end);
+          const tail = rest.slice(end + 2);
+          return (
+            <p key={i} className="flex gap-2 items-start">
+              <span className="text-[#0ea5e9] mt-0.5">•</span>
+              <span>
+                <strong className="text-[#0ea5e9]">{bold}</strong>
+                <span className="text-slate-300">{tail}</span>
+              </span>
+            </p>
+          );
+        }
+        if (line.startsWith("- ") || line.startsWith("* ")) {
+          return (
+            <p key={i} className="flex gap-2 items-start text-slate-300">
+              <span className="text-[#0ea5e9] mt-0.5">•</span>
+              <span>{line.slice(2)}</span>
+            </p>
+          );
+        }
+        if (line.match(/^[A-Z\u0600-\u06FF].*:$/)) {
+          return (
+            <p key={i} className="font-semibold text-white mt-3">
+              {line}
+            </p>
+          );
+        }
+        if (!line.trim()) return <div key={i} className="h-1" />;
+        return (
+          <p key={i} className="text-slate-300 leading-relaxed">
+            {line}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function WizardPage() {
-  const t = useTranslations();
   const { locale, dir } = useLocale();
-  const [step, setStep] = useState(0);
-  const [choices, setChoices] = useState<Record<number, string>>({});
-  const [showExplanation, setShowExplanation] = useState(false);
-  const [completed, setCompleted] = useState(false);
+  const isAr = locale === "ar";
 
-  const current = wizardSteps[step];
-  const progress = ((step + (completed ? 1 : 0)) / wizardSteps.length) * 100;
+  const [phase, setPhase] = useState<Phase>("describe");
+  const [description, setDescription] = useState("");
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function selectOption(value: string) {
-    setChoices((prev) => ({ ...prev, [step]: value }));
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function handleStart() {
+    if (!description.trim()) return;
+    setStarting(true);
+    setError(null);
+    try {
+      const id = await createSession(description);
+      setSessionId(id);
+
+      // Load the saved user message then stream the first AI response
+      const initial = await loadSession(id);
+      setMessages(initial.filter((m) => m.role === "user"));
+      setPhase("chat");
+      setStreaming(true);
+
+      let aiText = "";
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      for await (const chunk of streamMessage(id, description)) {
+        aiText += chunk;
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: aiText };
+          return updated;
+        });
+      }
+      setStreaming(false);
+    } catch (e) {
+      setError(String(e));
+      setStarting(false);
+      setStreaming(false);
+    }
+    setStarting(false);
   }
 
-  function next() {
-    if (step < wizardSteps.length - 1) {
-      setStep(step + 1);
-      setShowExplanation(false);
-    } else {
-      setCompleted(true);
+  async function handleSend() {
+    if (!input.trim() || streaming || sessionId === null) return;
+    const userContent = input.trim();
+    setInput("");
+    setMessages((prev) => [...prev, { role: "user", content: userContent }]);
+    setStreaming(true);
+    setError(null);
+
+    try {
+      let aiText = "";
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      for await (const chunk of streamMessage(sessionId, userContent)) {
+        aiText += chunk;
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: "assistant", content: aiText };
+          return updated;
+        });
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+    setStreaming(false);
+    inputRef.current?.focus();
+  }
+
+  function handleReset() {
+    setPhase("describe");
+    setDescription("");
+    setSessionId(null);
+    setMessages([]);
+    setInput("");
+    setError(null);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   }
 
-  function back() {
-    if (step > 0) {
-      setStep(step - 1);
-      setShowExplanation(false);
-    }
-  }
-
-  if (completed) {
+  if (phase === "describe") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white">
-        <div className="container mx-auto max-w-2xl px-6 py-24">
-          <div className="text-center mb-12 animate-fade-in">
-            <CheckCircle className="h-16 w-16 text-[#10b981] mx-auto mb-6" />
-            <h1 className="text-3xl font-bold mb-4">
-              {locale === "ar" ? t("wizard.summary_title") : t("wizard.summary_title")}
+      <div
+        className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white"
+        dir={dir}
+      >
+        <div className="container mx-auto max-w-2xl px-6 py-16">
+          <div className="text-center mb-10 animate-fade-in">
+            <div className="mx-auto mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-[#2563eb]/20 border border-[#2563eb]/30">
+              <Brain className="h-8 w-8 text-[#0ea5e9]" />
+            </div>
+            <h1 className="text-3xl font-bold mb-2">
+              {isAr ? "معالج CAEOS — الاستجواب العميق" : "CAEOS Wizard — Deep Interrogation"}
             </h1>
-            <p className="text-slate-300">
-              {locale === "ar" ? t("wizard.summary_description") : t("wizard.summary_description")}
+            <p className="text-slate-400 text-sm leading-relaxed">
+              {isAr
+                ? "صِف مشروعك وسيقوم CAEOS بتحليله دستورياً وطرح الأسئلة الصحيحة قبل أي كود."
+                : "Describe your project and CAEOS will constitutionally analyze it, asking the right questions before any code is written."}
             </p>
           </div>
 
-          <div className="space-y-4 mb-12">
-            {wizardSteps.map((s, i) => {
-              const chosenValue = choices[i] ?? s.options[0].value;
-              const chosenOption = s.options.find(o => o.value === chosenValue) ?? s.options[0];
-              return (
-                <div key={i} className="rounded-xl border border-white/10 bg-white/5 p-6">
-                  <p className="text-xs text-[#0ea5e9] font-mono mb-2">
-                    {locale === "ar" ? s.phaseAr : s.phase}
-                  </p>
-                  <p className="text-sm text-slate-400 mb-2">
-                    {locale === "ar" ? s.questionAr : s.question}
-                  </p>
-                  <p className="font-semibold text-white flex items-center gap-2">
-                    <CheckCircle className="h-4 w-4 text-[#10b981]" />
-                    {locale === "ar" ? chosenOption.labelAr : chosenOption.label}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-8 space-y-6 animate-slide-up">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                {isAr ? "صِف مشروعك بحرية — ما هي فكرته؟ ما المشكلة التي يحلها؟" : "Describe your project freely — what is it? what problem does it solve?"}
+              </label>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={
+                  isAr
+                    ? "مثال: أريد بناء منصة لإدارة المهام للفرق المطورة، تتكامل مع GitHub وتعرض تقارير الأداء..."
+                    : "Example: I want to build a task management platform for dev teams, integrated with GitHub and showing performance reports..."
+                }
+                rows={6}
+                dir={dir}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-slate-500 focus:border-[#2563eb] focus:outline-none focus:ring-1 focus:ring-[#2563eb] resize-none transition-all"
+              />
+            </div>
 
-          <div className="flex flex-col gap-4">
+            {error && (
+              <p className="text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg p-3">
+                {error}
+              </p>
+            )}
+
             <button
-              onClick={() => { setCompleted(false); setStep(0); setChoices({}); }}
-              className="rounded-lg bg-[#2563eb] px-8 py-4 font-semibold text-white transition-all hover:bg-blue-600"
+              onClick={handleStart}
+              disabled={!description.trim() || starting}
+              className="w-full flex items-center justify-center gap-2 rounded-lg bg-[#2563eb] px-8 py-4 font-semibold text-white transition-all hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t("wizard.modify")}
+              {starting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {isAr ? "CAEOS يحلل مشروعك…" : "CAEOS is analyzing your project…"}
+                </>
+              ) : (
+                <>
+                  <Shield className="h-4 w-4" />
+                  {isAr ? "ابدأ الاستجواب الدستوري" : "Start Constitutional Interrogation"}
+                  <ChevronRight className={`h-4 w-4 ${dir === "rtl" ? "rotate-180" : ""}`} />
+                </>
+              )}
             </button>
-            <Link href="/" className="text-center text-slate-400 hover:text-white transition-colors">
-              ← Return to Home
-            </Link>
+
+            <p className="text-xs text-center text-slate-500">
+              {isAr
+                ? "القانون الأول: ممنوع كتابة كود قبل تحليل النوايا"
+                : "Law #1: No Code Before Reasoning — intent analysis comes first"}
+            </p>
           </div>
         </div>
       </div>
@@ -162,111 +290,104 @@ export default function WizardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white" dir={dir}>
-      <div className="container mx-auto max-w-2xl px-6 py-16">
-        {/* Header */}
-        <div className="mb-8 text-center animate-fade-in">
-          <h1 className="text-3xl font-bold mb-2">
-            {locale === "ar" ? t("wizard.title") : t("wizard.title")}
-          </h1>
-          <p className="text-slate-400">
-            {locale === "ar" ? t("wizard.subtitle") : t("wizard.subtitle")}
-          </p>
-        </div>
-
-        {/* Progress */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
-            <span>{t("wizard.progress")}</span>
-            <span>{t("wizard.question_counter", { current: step + 1, total: wizardSteps.length })}</span>
+    <div
+      className="flex flex-col min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white"
+      dir={dir}
+    >
+      {/* Header */}
+      <div className="sticky top-0 z-10 border-b border-white/10 bg-slate-900/80 backdrop-blur-sm px-4 py-3">
+        <div className={`container mx-auto max-w-3xl flex items-center justify-between ${dir === "rtl" ? "flex-row-reverse" : ""}`}>
+          <div className={`flex items-center gap-3 ${dir === "rtl" ? "flex-row-reverse" : ""}`}>
+            <div className="h-2 w-2 rounded-full bg-[#10b981] animate-pulse" />
+            <span className="text-sm font-medium text-slate-300">
+              {isAr ? "CAEOS — الاستجواب العميق نشط" : "CAEOS — Deep Interrogation Active"}
+            </span>
           </div>
-          <div className="h-2 rounded-full bg-white/10">
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {isAr ? "مشروع جديد" : "New Project"}
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto max-w-3xl px-4 py-6 space-y-6">
+          {messages.map((msg, i) => (
             <div
-              className="h-full rounded-full bg-[#2563eb] transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Question Card */}
-        <div className="rounded-xl border border-white/10 bg-white/5 p-8 mb-6 animate-slide-up">
-          <p className="text-xs text-[#0ea5e9] font-mono mb-4">
-            {locale === "ar" ? current.phaseAr : current.phase}
-          </p>
-          <h2 className="text-xl font-semibold mb-6">
-            {locale === "ar" ? current.questionAr : current.question}
-          </h2>
-
-          {/* Recommendation */}
-          <div className="mb-6 rounded-lg bg-[#2563eb]/10 border border-[#2563eb]/20 px-4 py-3">
-            <p className="text-xs text-[#0ea5e9] mb-1">{t("wizard.recommendation")}</p>
-            <p className="text-sm font-medium text-white">
-              {locale === "ar" ? current.recommendationAr : current.recommendation}
-            </p>
-          </div>
-
-          {/* Options */}
-          <div className="space-y-3 mb-6">
-            {current.options.map((option) => {
-              const isSelected = choices[step] === option.value;
-              const isRecommended = option.label === current.recommendation;
-              return (
-                <button
-                  key={option.value}
-                  onClick={() => selectOption(option.value)}
-                  className={`w-full rounded-lg border p-4 text-left transition-all ${
-                    isSelected
-                      ? "border-[#2563eb] bg-[#2563eb]/20 text-white"
-                      : "border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span>{locale === "ar" ? option.labelAr : option.label}</span>
-                    {isRecommended && (
-                      <span className="text-xs text-[#10b981] border border-[#10b981]/30 rounded px-2 py-0.5">
-                        ✓ {locale === "ar" ? "موصى به" : "Recommended"}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Explanation toggle */}
-          <button
-            onClick={() => setShowExplanation(!showExplanation)}
-            className="flex items-center gap-2 text-sm text-[#0ea5e9] hover:text-white transition-colors"
-          >
-            <Lightbulb className="h-4 w-4" />
-            {t("wizard.explain")}
-          </button>
-
-          {showExplanation && (
-            <div className="mt-4 rounded-lg bg-white/5 border border-white/10 p-4 text-sm text-slate-300 animate-fade-in">
-              {locale === "ar" ? current.explanationAr : current.explanation}
+              key={i}
+              className={`flex gap-3 ${msg.role === "user" ? (dir === "rtl" ? "flex-row-reverse" : "flex-row-reverse") : ""}`}
+            >
+              {msg.role === "assistant" && (
+                <div className="flex-shrink-0 mt-1 h-7 w-7 rounded-full bg-[#2563eb]/20 border border-[#2563eb]/40 flex items-center justify-center">
+                  <Shield className="h-3.5 w-3.5 text-[#0ea5e9]" />
+                </div>
+              )}
+              <div
+                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-[#2563eb] text-white rounded-tr-sm ml-auto"
+                    : "bg-white/5 border border-white/10 rounded-tl-sm"
+                }`}
+                dir={dir}
+              >
+                {msg.role === "assistant" ? (
+                  <MarkdownText text={msg.content} />
+                ) : (
+                  <p>{msg.content}</p>
+                )}
+                {msg.role === "assistant" && msg.content === "" && streaming && (
+                  <span className="inline-flex gap-1 items-center text-slate-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#0ea5e9] animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#0ea5e9] animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#0ea5e9] animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </span>
+                )}
+              </div>
             </div>
-          )}
+          ))}
+          <div ref={bottomRef} />
         </div>
+      </div>
 
-        {/* Navigation */}
-        <div className={`flex items-center justify-between ${dir === "rtl" ? "flex-row-reverse" : ""}`}>
-          <button
-            onClick={back}
-            disabled={step === 0}
-            className="flex items-center gap-2 rounded-lg border border-white/20 px-6 py-3 text-sm font-medium text-slate-300 transition-all hover:bg-white/10 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className={`h-4 w-4 ${dir === "rtl" ? "rotate-180" : ""}`} />
-            {t("wizard.back")}
-          </button>
-
-          <button
-            onClick={next}
-            className="flex items-center gap-2 rounded-lg bg-[#2563eb] px-8 py-3 font-semibold text-white transition-all hover:bg-blue-600"
-          >
-            {step === wizardSteps.length - 1 ? t("wizard.confirm") : locale === "ar" ? "التالي" : "Next"}
-            <ChevronRight className={`h-4 w-4 ${dir === "rtl" ? "rotate-180" : ""}`} />
-          </button>
+      {/* Input */}
+      <div className="sticky bottom-0 border-t border-white/10 bg-slate-900/80 backdrop-blur-sm px-4 py-3">
+        <div className="container mx-auto max-w-3xl">
+          {error && (
+            <p className="text-xs text-red-400 mb-2">{error}</p>
+          )}
+          <div className={`flex gap-2 items-end ${dir === "rtl" ? "flex-row-reverse" : ""}`}>
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={isAr ? "اكتب ردك هنا… (Enter للإرسال)" : "Type your answer here… (Enter to send)"}
+              rows={2}
+              dir={dir}
+              disabled={streaming}
+              className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-[#2563eb] focus:outline-none focus:ring-1 focus:ring-[#2563eb] resize-none transition-all disabled:opacity-50"
+            />
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || streaming}
+              className="flex-shrink-0 flex h-12 w-12 items-center justify-center rounded-xl bg-[#2563eb] text-white transition-all hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {streaming ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className={`h-4 w-4 ${dir === "rtl" ? "rotate-180" : ""}`} />
+              )}
+            </button>
+          </div>
+          <p className="mt-2 text-xs text-center text-slate-600">
+            {isAr
+              ? "القانون العاشر: السيادة البشرية فوق كل شيء — قراراتك هي قراراتك"
+              : "Law #10: Human Sovereignty — your decisions, your architecture"}
+          </p>
         </div>
       </div>
     </div>
